@@ -48,6 +48,7 @@ import org.koin.compose.viewmodel.koinActivityViewModel
 enum class MainToolbarActiveButton {
 	User,
 	Home,
+	Discover,
 	Search,
 
 	None,
@@ -141,6 +142,15 @@ private fun MainToolbar(
 						},
 						colors = if (activeButton == MainToolbarActiveButton.Home) activeButtonColors else ButtonDefaults.colors(),
 						content = { Text(stringResource(R.string.lbl_home)) }
+					)
+					Button(
+						onClick = {
+							if (activeButton != MainToolbarActiveButton.Discover) {
+								navigationRepository.navigate(Destinations.discover)
+							}
+						},
+						colors = if (activeButton == MainToolbarActiveButton.Discover) activeButtonColors else ButtonDefaults.colors(),
+						content = { Text(stringResource(R.string.lbl_discover)) }
 					)
 					Button(
 						onClick = {

@@ -1,22 +1,27 @@
+@file:OptIn(ExperimentalSharedTransitionApi::class)
+
 package org.jellyfin.androidtv.ui.navigation
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
-import androidx.navigation3.scene.Scene
-import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.ui.defaultPopTransitionSpec
-import androidx.navigation3.ui.defaultTransitionSpec
-import androidx.navigationevent.NavigationEvent
 
 typealias RouteParameters = Map<String, String>
 typealias RouteComposable = @Composable ((context: RouteContext) -> Unit)
@@ -85,36 +90,48 @@ fun ProvideRouter(
 fun RouterContent(
 	router: Router = LocalRouter.current,
 	fallbackRoute: String = "/",
-	transitionSpec: AnimatedContentTransitionScope<Scene<RouteContext>>.() -> ContentTransform = defaultTransitionSpec(),
-	popTransitionSpec: AnimatedContentTransitionScope<Scene<RouteContext>>.() -> ContentTransform = defaultPopTransitionSpec(),
-	predictivePopTransitionSpec: AnimatedContentTransitionScope<Scene<RouteContext>>.(@NavigationEvent.SwipeEdge Int) -> ContentTransform = { popTransitionSpec() },
+	transitionSpec: AnimatedContentTransitionScope<RouteContext>.() -> ContentTransform = { fadeIn() togetherWith fadeOut() },
+	popTransitionSpec: AnimatedContentTransitionScope<RouteContext>.() -> ContentTransform = transitionSpec,
 ) {
+	val backStack = router.backStack
+	val currentEntry = backStack.lastOrNull() ?: RouteContext(fallbackRoute, emptyMap())
+	val saveableStateHolder = rememberSaveableStateHolder()
+	var lastBackStackSize by remember { mutableStateOf(backStack.size) }
+	val isPop = backStack.size < lastBackStackSize
+
+	LaunchedEffect(backStack.size) {
+		lastBackStackSize = backStack.size
+	}
+
 	SharedTransitionLayout {
 		CompositionLocalProvider(LocalRouterTransitionScope provides this@SharedTransitionLayout) {
-			NavDisplay(
-				backStack = router.backStack,
-				onBack = { router.back() },
-				entryDecorators = listOf(
-					rememberSaveableStateHolderNavEntryDecorator(),
-				),
-				transitionSpec = transitionSpec,
-				popTransitionSpec = popTransitionSpec,
-				predictivePopTransitionSpec = predictivePopTransitionSpec,
-				entryProvider = { backStackEntry ->
-					NavEntry(backStackEntry) {
-						val route = backStackEntry.route
-						val composable = router.resolve(route)
-						if (composable == null) {
-							val fallbackComposable = router.resolve(fallbackRoute)
-								?: error("Unknown route $route, fallback $fallbackRoute is invalid")
-							val context = backStackEntry.copy(route = fallbackRoute)
-							fallbackComposable(context)
-						} else {
-							composable(backStackEntry)
-						}
-					}
+			AnimatedContent(
+				targetState = currentEntry,
+				transitionSpec = { if (isPop) popTransitionSpec() else transitionSpec() },
+				label = "RouterContent"
+			) { entry ->
+				val composable = router.resolve(entry.route)
+				val fallbackComposable = if (composable == null) {
+					router.resolve(fallbackRoute)
+						?: error("Unknown route ${entry.route}, fallback $fallbackRoute is invalid")
+				} else {
+					null
 				}
-			)
+				val context = if (composable == null) entry.copy(route = fallbackRoute) else entry
+				val stateKey = buildStateKey(context)
+
+				saveableStateHolder.SaveableStateProvider(stateKey) {
+					(composable ?: fallbackComposable)?.invoke(context)
+				}
+			}
 		}
 	}
+}
+
+private fun buildStateKey(context: RouteContext): String {
+	if (context.parameters.isEmpty()) return context.route
+	val encoded = context.parameters.entries
+		.sortedBy { it.key }
+		.joinToString("&") { "${it.key}=${it.value}" }
+	return "${context.route}?$encoded"
 }

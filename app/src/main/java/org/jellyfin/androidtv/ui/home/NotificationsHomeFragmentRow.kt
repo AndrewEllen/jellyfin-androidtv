@@ -14,45 +14,48 @@ import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.ui.notification.AppNotificationPresenter
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
+import kotlin.math.min
 
 class NotificationsHomeFragmentRow(
-	lifecycleScope: LifecycleCoroutineScope,
-	private val notificationsRepository: NotificationsRepository,
+    lifecycleScope: LifecycleCoroutineScope,
+    private val notificationsRepository: NotificationsRepository,
+    private val insertPosition: Int = 0,
 ) : HomeFragmentRow, OnItemViewClickedListener {
-	private val announcementAdapter by lazy { MutableObjectAdapter<AppNotification>(AppNotificationPresenter()) }
-	private val listRow by lazy { ListRow(null, announcementAdapter) }
-	private var rowsAdapter: MutableObjectAdapter<Row>? = null
-	private var rowAdded = false
+    private val announcementAdapter by lazy { MutableObjectAdapter<AppNotification>(AppNotificationPresenter()) }
+    private val listRow by lazy { ListRow(null, announcementAdapter) }
+    private var rowsAdapter: MutableObjectAdapter<Row>? = null
+    private var rowAdded = false
 
-	init {
-		notificationsRepository.notifications.onEach { notifications ->
-			announcementAdapter.replaceAll(notifications)
-			update(notifications.isEmpty())
-		}.launchIn(lifecycleScope)
-	}
+    init {
+        notificationsRepository.notifications.onEach { notifications ->
+            announcementAdapter.replaceAll(notifications)
+            update(notifications.isEmpty())
+        }.launchIn(lifecycleScope)
+    }
 
-	private fun update(empty: Boolean) {
-		if (rowsAdapter == null) return
+    private fun update(empty: Boolean) {
+        if (rowsAdapter == null) return
 
-		if (empty && rowAdded) {
-			rowsAdapter?.remove(listRow)
-			rowAdded = false
-		}
+        if (empty && rowAdded) {
+            rowsAdapter?.remove(listRow)
+            rowAdded = false
+        }
 
-		if (!empty && !rowAdded) {
-			rowsAdapter?.add(0, listRow)
-			rowAdded = true
-		}
-	}
+        if (!empty && !rowAdded) {
+            val index = min(insertPosition, rowsAdapter?.size() ?: 0)
+            rowsAdapter?.add(index, listRow)
+            rowAdded = true
+        }
+    }
 
-	override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
-		this.rowsAdapter = rowsAdapter
-		update(notificationsRepository.notifications.value.isEmpty())
-	}
+    override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
+        this.rowsAdapter = rowsAdapter
+        update(notificationsRepository.notifications.value.isEmpty())
+    }
 
-	override fun onItemClicked(itemViewHolder: Presenter.ViewHolder?, item: Any?, rowViewHolder: RowPresenter.ViewHolder?, row: Row?) {
-		if (item !is AppNotification) return
+    override fun onItemClicked(itemViewHolder: Presenter.ViewHolder?, item: Any?, rowViewHolder: RowPresenter.ViewHolder?, row: Row?) {
+        if (item !is AppNotification) return
 
-		notificationsRepository.dismissNotification(item)
-	}
+        notificationsRepository.dismissNotification(item)
+    }
 }

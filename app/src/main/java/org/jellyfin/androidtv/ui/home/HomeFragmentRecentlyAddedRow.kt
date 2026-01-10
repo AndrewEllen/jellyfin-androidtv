@@ -1,4 +1,4 @@
-package org.jellyfin.androidtv.ui.home
+﻿package org.jellyfin.androidtv.ui.home
 
 import android.content.Context
 import androidx.leanback.widget.Row
@@ -13,24 +13,24 @@ import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
 
-class HomeFragmentLatestRow : HomeFragmentRow {
+class HomeFragmentRecentlyAddedRow : HomeFragmentRow {
     override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
-        val movieRequest = GetItemsRequest(
+        val moviesRequest = GetItemsRequest(
             fields = ItemRepository.itemFields,
             includeItemTypes = setOf(BaseItemKind.MOVIE),
             recursive = true,
-            sortBy = setOf(ItemSortBy.PREMIERE_DATE),
+            sortBy = setOf(ItemSortBy.DATE_CREATED),
             sortOrder = setOf(SortOrder.DESCENDING),
             imageTypeLimit = 1,
             limit = ITEM_LIMIT,
             enableTotalRecordCount = false,
         )
 
-        val showRequest = GetItemsRequest(
+        val showsRequest = GetItemsRequest(
             fields = ItemRepository.itemFields,
             includeItemTypes = setOf(BaseItemKind.SERIES),
             recursive = true,
-            sortBy = setOf(ItemSortBy.PREMIERE_DATE),
+            sortBy = setOf(ItemSortBy.DATE_CREATED),
             sortOrder = setOf(SortOrder.DESCENDING),
             imageTypeLimit = 1,
             limit = ITEM_LIMIT,
@@ -38,8 +38,8 @@ class HomeFragmentLatestRow : HomeFragmentRow {
         )
 
         val rows = listOf(
-            BrowseRowDef(context.getString(R.string.home_latest_movies), movieRequest, 0, false, false, arrayOf(ChangeTriggerType.LibraryUpdated)),
-            BrowseRowDef(context.getString(R.string.home_latest_shows), showRequest, 0, false, false, arrayOf(ChangeTriggerType.LibraryUpdated)),
+            BrowseRowDef(context.getString(R.string.home_recent_movies), moviesRequest, 0, false, false, arrayOf(ChangeTriggerType.LibraryUpdated)),
+            BrowseRowDef(context.getString(R.string.home_recent_shows), showsRequest, 0, false, false, arrayOf(ChangeTriggerType.LibraryUpdated)),
         )
 
         rows.forEach { row ->

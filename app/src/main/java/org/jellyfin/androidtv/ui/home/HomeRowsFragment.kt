@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.View
 import androidx.leanback.app.RowsSupportFragment
 import androidx.leanback.widget.ListRow
+import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.Presenter
@@ -15,6 +16,7 @@ import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -30,9 +32,7 @@ import org.jellyfin.androidtv.constant.HomeSectionType
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
-import org.jellyfin.androidtv.data.repository.UserViewsRepository
 import org.jellyfin.androidtv.data.service.BackgroundService
-import org.jellyfin.androidtv.preference.UserSettingPreferences
 import org.jellyfin.androidtv.ui.browsing.CompositeClickedListener
 import org.jellyfin.androidtv.ui.browsing.CompositeSelectedListener
 import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
@@ -46,6 +46,7 @@ import org.jellyfin.androidtv.ui.presentation.CardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter
 import org.jellyfin.androidtv.util.KeyProcessor
+import org.jellyfin.androidtv.util.PlaybackHelper
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
@@ -63,15 +64,25 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val mediaManager by inject<MediaManager>()
 	private val notificationsRepository by inject<NotificationsRepository>()
 	private val userRepository by inject<UserRepository>()
-	private val userSettingPreferences by inject<UserSettingPreferences>()
-	private val userViewsRepository by inject<UserViewsRepository>()
+	private val playbackHelper by inject<PlaybackHelper>()
 	private val dataRefreshService by inject<DataRefreshService>()
 	private val customMessageRepository by inject<CustomMessageRepository>()
 	private val navigationRepository by inject<NavigationRepository>()
 	private val itemLauncher by inject<ItemLauncher>()
 	private val keyProcessor by inject<KeyProcessor>()
 
-	private val helper by lazy { HomeFragmentHelper(requireContext(), userRepository) }
+	private val helper by lazy { HomeFragmentHelper(requireContext()) }
+	private val featuredRow by lazy {
+		helper.loadFeatured { item ->
+			playbackHelper.retrieveAndPlay(item.id, false, requireContext())
+		}
+	}
+
+	private var heroAutoAdvanceJob: Job? = null
+	private var heroRowViewHolder: ListRowPresenter.ViewHolder? = null
+	private var heroRowAdapter: ItemRowAdapter? = null
+
+	private val heroAutoAdvanceDelay = 8.seconds
 
 	// Data
 	private var currentItem: BaseRowItem? = null
@@ -79,8 +90,8 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private var justLoaded = true
 
 	// Special rows
-	private val notificationsRow by lazy { NotificationsHomeFragmentRow(lifecycleScope, notificationsRepository) }
-	private val nowPlaying by lazy { HomeFragmentNowPlayingRow(lifecycleScope, playbackManager, mediaManager) }
+	private val notificationsRow by lazy { NotificationsHomeFragmentRow(lifecycleScope, notificationsRepository, 1) }
+	private val nowPlaying by lazy { HomeFragmentNowPlayingRow(lifecycleScope, playbackManager, mediaManager, 1) }
 	private val liveTVRow by lazy { HomeFragmentLiveTVRow(requireActivity(), userRepository, navigationRepository) }
 
 	override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,11 +105,10 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			}
 
 			// Start out with default sections
-			val homesections = userSettingPreferences.activeHomesections
 			var includeLiveTvRows = false
 
 			// Check for live TV support
-			if (homesections.contains(HomeSectionType.LIVE_TV) && currentUser.policy?.enableLiveTvAccess == true) {
+			if (currentUser.policy?.enableLiveTvAccess == true) {
 				// This is kind of ugly, but it mirrors how web handles the live TV rows on the home screen
 				// If we can retrieve one live TV recommendation, then we should display the rows
 				val recommendedPrograms by api.liveTvApi.getRecommendedPrograms(
@@ -117,21 +127,18 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			if (!isActive) return@launch
 
 			// Actually add the sections
-			for (section in homesections) when (section) {
-				HomeSectionType.LATEST_MEDIA -> rows.add(helper.loadRecentlyAdded(userViewsRepository.views.first()))
-				HomeSectionType.LIBRARY_TILES_SMALL -> rows.add(HomeFragmentViewsRow(small = false))
-				HomeSectionType.LIBRARY_BUTTONS -> rows.add(HomeFragmentViewsRow(small = true))
-				HomeSectionType.RESUME -> rows.add(helper.loadResumeVideo())
-				HomeSectionType.RESUME_AUDIO -> rows.add(helper.loadResumeAudio())
-				HomeSectionType.RESUME_BOOK -> Unit // Books are not (yet) supported
-				HomeSectionType.ACTIVE_RECORDINGS -> rows.add(helper.loadLatestLiveTvRecordings())
-				HomeSectionType.NEXT_UP -> rows.add(helper.loadNextUp())
-				HomeSectionType.LIVE_TV -> if (includeLiveTvRows) {
-					rows.add(liveTVRow)
-					rows.add(helper.loadOnNow())
-				}
+			rows.add(HomeFragmentViewsRow(small = false))
+			rows.add(helper.loadResumeVideo())
+			rows.add(helper.loadNextUp())
+			rows.add(HomeFragmentRecentlyAddedRow())
+			rows.add(HomeFragmentBecauseYouWatchedRow(lifecycleScope))
+			rows.add(helper.loadLatestMoviesAndShows())
+			rows.add(HomeFragmentGenreRecommendationsRow(lifecycleScope))
+			rows.add(HomeFragmentExternalSectionsRow(lifecycleScope))
 
-				HomeSectionType.NONE -> Unit
+			if (includeLiveTvRows) {
+				rows.add(liveTVRow)
+				rows.add(helper.loadOnNow())
 			}
 
 			// Add sections to layout
@@ -139,6 +146,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 				val cardPresenter = CardPresenter()
 
 				// Add rows in order
+				featuredRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				notificationsRow.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				nowPlaying.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
 				for (row in rows) row.addToRowsAdapter(requireContext(), cardPresenter, adapter as MutableObjectAdapter<Row>)
@@ -183,6 +191,12 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean {
 		if (event?.action != KeyEvent.ACTION_UP) return false
 		return keyProcessor.handleKey(keyCode, currentItem, activity)
+	}
+
+
+	override fun onPause() {
+		super.onPause()
+		stopHeroAutoAdvance()
 	}
 
 	override fun onResume() {
@@ -255,6 +269,39 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		}
 	}
 
+
+	private fun startHeroAutoAdvance(rowViewHolder: ListRowPresenter.ViewHolder, row: ListRow) {
+		val adapter = row.adapter as? ItemRowAdapter ?: return
+		if (adapter.size() < 2) return
+
+		heroRowViewHolder = rowViewHolder
+		heroRowAdapter = adapter
+		heroAutoAdvanceJob?.cancel()
+
+		heroAutoAdvanceJob = lifecycleScope.launch {
+			while (isActive) {
+				delay(heroAutoAdvanceDelay)
+
+				val viewHolder = heroRowViewHolder ?: return@launch
+				val rowAdapter = heroRowAdapter ?: return@launch
+				val gridView = viewHolder.gridView
+				val total = rowAdapter.size()
+				if (total < 2 || !gridView.hasFocus()) continue
+
+				val current = gridView.selectedPosition.coerceAtLeast(0)
+				val next = (current + 1) % total
+				gridView.setSelectedPositionSmooth(next)
+			}
+		}
+	}
+
+	private fun stopHeroAutoAdvance() {
+		heroAutoAdvanceJob?.cancel()
+		heroAutoAdvanceJob = null
+		heroRowViewHolder = null
+		heroRowAdapter = null
+	}
+
 	private inner class ItemViewSelectedListener : OnItemViewSelectedListener {
 		override fun onItemSelected(
 			itemViewHolder: Presenter.ViewHolder?,
@@ -262,18 +309,28 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			rowViewHolder: RowPresenter.ViewHolder?,
 			row: Row?,
 		) {
+			val listRow = row as? ListRow
+			val listRowViewHolder = rowViewHolder as? ListRowPresenter.ViewHolder
+			val isFeaturedRow = listRow is FeaturedListRow && listRowViewHolder != null
+
+			if (!isFeaturedRow) stopHeroAutoAdvance()
+
 			if (item !is BaseRowItem) {
 				currentItem = null
 				//fill in default background
 				backgroundService.clearBackgrounds()
 			} else {
 				currentItem = item
-				currentRow = row as ListRow
+				currentRow = listRow
 
-				val itemRowAdapter = row.adapter as? ItemRowAdapter
+				val itemRowAdapter = listRow?.adapter as? ItemRowAdapter
 				itemRowAdapter?.loadMoreItemsIfNeeded(itemRowAdapter.indexOf(item))
 
 				backgroundService.setBackground(item.baseItem)
+
+				if (isFeaturedRow && listRowViewHolder != null && listRow != null) {
+					startHeroAutoAdvance(listRowViewHolder, listRow)
+				}
 			}
 		}
 	}

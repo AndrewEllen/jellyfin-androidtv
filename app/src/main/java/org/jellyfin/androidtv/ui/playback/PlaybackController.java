@@ -50,6 +50,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.UUID;
 
 import kotlin.Lazy;
 import timber.log.Timber;
@@ -180,6 +181,9 @@ public class PlaybackController implements PlaybackControllerNotifiable {
             return mCurrentStreamInfo.getMediaSource();
         } else {
             BaseItemDto item = getCurrentlyPlayingItem();
+            if (item == null) {
+                return null;
+            }
             List<MediaSourceInfo> mediaSources = item.getMediaSources();
 
             if (mediaSources == null || mediaSources.isEmpty()) {
@@ -521,8 +525,16 @@ public class PlaybackController implements PlaybackControllerNotifiable {
                 }
             }
         }
-        if (!isLiveTv && currentMediaSource != null) {
-            internalOptions.setMediaSourceId(currentMediaSource.getId());
+        if (!isLiveTv) {
+            String requestedMediaSourceId = null;
+            if (mCurrentOptions != null && item.getId() != null && item.getId().equals(mCurrentOptions.getItemId())) {
+                requestedMediaSourceId = mCurrentOptions.getMediaSourceId();
+            }
+            if (requestedMediaSourceId != null) {
+                internalOptions.setMediaSourceId(requestedMediaSourceId);
+            } else if (currentMediaSource != null) {
+                internalOptions.setMediaSourceId(currentMediaSource.getId());
+            }
         }
         DeviceProfile internalProfile = DeviceProfileKt.createDeviceProfile(
                 mFragment.getContext(),

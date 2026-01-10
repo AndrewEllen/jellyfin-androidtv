@@ -15,7 +15,8 @@ android {
 		targetSdk = libs.versions.android.targetSdk.get().toInt()
 
 		// Release version
-		applicationId = namespace
+		val baseApplicationId = "com.andrewellen.jellyfin.androidtv"
+		applicationId = baseApplicationId
 		versionName = project.getVersionName()
 		versionCode = getVersionCode(versionName!!)
 	}
@@ -35,9 +36,10 @@ android {
 			proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
 			// Set package names used in various XML files
-			resValue("string", "app_id", namespace!!)
-			resValue("string", "app_search_suggest_authority", "${namespace}.content")
-			resValue("string", "app_search_suggest_intent_data", "content://${namespace}.content/intent")
+			val baseApplicationId = defaultConfig.applicationId!!
+			resValue("string", "app_id", baseApplicationId)
+			resValue("string", "app_search_suggest_authority", "${baseApplicationId}.content")
+			resValue("string", "app_search_suggest_intent_data", "content://${baseApplicationId}.content/intent")
 
 			// Set flavored application name
 			resValue("string", "app_name", "@string/app_name_release")
@@ -50,9 +52,10 @@ android {
 			applicationIdSuffix = ".debug"
 
 			// Set package names used in various XML files
-			resValue("string", "app_id", namespace + applicationIdSuffix)
-			resValue("string", "app_search_suggest_authority", "${namespace + applicationIdSuffix}.content")
-			resValue("string", "app_search_suggest_intent_data", "content://${namespace + applicationIdSuffix}.content/intent")
+			val debugApplicationId = defaultConfig.applicationId + applicationIdSuffix
+			resValue("string", "app_id", debugApplicationId)
+			resValue("string", "app_search_suggest_authority", "${debugApplicationId}.content")
+			resValue("string", "app_search_suggest_intent_data", "content://${debugApplicationId}.content/intent")
 
 			// Set flavored application name
 			resValue("string", "app_name", "@string/app_name_debug")
@@ -115,7 +118,6 @@ dependencies {
 	implementation(libs.androidx.fragment.compose)
 	implementation(libs.androidx.leanback.core)
 	implementation(libs.androidx.leanback.preference)
-	implementation(libs.androidx.navigation3.ui)
 	implementation(libs.androidx.preference)
 	implementation(libs.androidx.appcompat)
 	implementation(libs.androidx.tvprovider)
@@ -123,7 +125,6 @@ dependencies {
 	implementation(libs.androidx.recyclerview)
 	implementation(libs.androidx.work.runtime)
 	implementation(libs.bundles.androidx.lifecycle)
-	implementation(libs.androidx.window)
 	implementation(libs.androidx.cardview)
 	implementation(libs.androidx.startup)
 	implementation(libs.bundles.androidx.compose)
