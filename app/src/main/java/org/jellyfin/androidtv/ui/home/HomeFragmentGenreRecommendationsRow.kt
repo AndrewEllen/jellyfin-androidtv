@@ -43,6 +43,7 @@ class HomeFragmentGenreRecommendationsRow(
                         genres = setOf(genre),
                         recursive = true,
                         sortBy = setOf(ItemSortBy.RANDOM),
+                        startIndex = 0,
                         limit = ITEM_LIMIT,
                         imageTypeLimit = 1,
                         enableTotalRecordCount = false,

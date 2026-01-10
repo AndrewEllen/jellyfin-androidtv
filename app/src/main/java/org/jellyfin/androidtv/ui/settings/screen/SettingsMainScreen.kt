@@ -41,6 +41,15 @@ fun SettingsMainScreen() {
 			)
 		}
 
+		item {
+			ListButton(
+				leadingContent = { Icon(painterResource(R.drawable.ic_settings), contentDescription = null) },
+				headingContent = { Text(stringResource(R.string.pref_external_services)) },
+				captionContent = { Text(stringResource(R.string.pref_external_services_description)) },
+				onClick = { router.push(Routes.EXTERNAL_SERVICES) }
+			)
+		}
+
 		// TODO: Temporarily added to root - should be accessed via customization screen instead
 		item {
 			ListButton(

@@ -14,6 +14,7 @@ import org.jellyfin.androidtv.data.model.ExternalSection
 import org.jellyfin.androidtv.data.model.ExternalSectionType
 import org.jellyfin.androidtv.data.repository.ExternalSectionsRepository
 import org.jellyfin.androidtv.ui.presentation.CardPresenter
+import org.jellyfin.androidtv.ui.presentation.ExternalCardPresenter
 import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.TextItemPresenter
 import org.koin.core.component.KoinComponent
@@ -47,14 +48,17 @@ class HomeFragmentExternalSectionsRow(
         section: ExternalSection,
     ) {
         val title = section.title?.takeIf { it.isNotBlank() } ?: resolveTitle(context, section)
-        val rowAdapter = ArrayObjectAdapter(TextItemPresenter())
 
         if (section.items.isEmpty()) {
-            rowAdapter.add(context.getString(R.string.discover_requires_jellyseerr))
-        } else {
-            section.items.forEach { item ->
-                rowAdapter.add(item.name)
-            }
+            val emptyAdapter = ArrayObjectAdapter(TextItemPresenter())
+            emptyAdapter.add(context.getString(R.string.lbl_no_items))
+            rowsAdapter.add(ListRow(HeaderItem(title), emptyAdapter))
+            return
+        }
+
+        val rowAdapter = ArrayObjectAdapter(ExternalCardPresenter())
+        section.items.forEach { item ->
+            rowAdapter.add(item)
         }
 
         rowsAdapter.add(ListRow(HeaderItem(title), rowAdapter))

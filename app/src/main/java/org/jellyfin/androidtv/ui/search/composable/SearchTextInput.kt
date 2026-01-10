@@ -1,6 +1,7 @@
 package org.jellyfin.androidtv.ui.search.composable
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +40,7 @@ fun SearchTextInput(
 ) {
 	val interactionSource = remember { MutableInteractionSource() }
 	val focused by interactionSource.collectIsFocusedAsState()
+	val keyboardController = LocalSoftwareKeyboardController.current
 
 	val color = when {
 		focused -> JellyfinTheme.colorScheme.inputFocused to JellyfinTheme.colorScheme.onInputFocused
@@ -51,7 +54,13 @@ fun SearchTextInput(
 		)
 	) {
 		BasicTextField(
-			modifier = modifier,
+			modifier = modifier
+				.clickable(
+					interactionSource = interactionSource,
+					indication = null,
+				) {
+					keyboardController?.show()
+				},
 			value = query,
 			singleLine = true,
 			interactionSource = interactionSource,
@@ -64,7 +73,7 @@ fun SearchTextInput(
 				// Note: Compose does not support a press to open functionality (yet?) or programmatic keyboard activation so we can only
 				// use the show on focus behavior. Unfortunately this does not work great with some vendors like Amazon.
 				// In addition, this boolean cannot be unset with the (stateless) BasicTextField implementation we're using
-				showKeyboardOnFocus = true,
+				showKeyboardOnFocus = false,
 			),
 			textStyle = LocalTextStyle.current,
 			cursorBrush = SolidColor(color.first),

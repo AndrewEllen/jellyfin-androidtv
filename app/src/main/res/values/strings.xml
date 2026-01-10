@@ -3,7 +3,7 @@
     <string name="app_name_release" translatable="false" tools:ignore="UnusedResources">Jellyfin</string>
     <string name="app_name_debug" translatable="false" tools:ignore="UnusedResources">Jellyfin Debug</string>
     <string name="video_error_unknown_error">Failed to load video</string>
-    <string name="loading">Loading…</string>
+    <string name="loading">Loadingâ€¦</string>
     <string name="btn_cancel">Cancel</string>
     <string name="byletter_letters">ABCDEFGHIJKLMNOPQRSTUVWXYZ</string>
     <string name="pref_playback">Playback</string>
@@ -24,8 +24,18 @@
     <string name="lbl_status">%1$s / %2$s</string>
     <string name="lbl_genres">Genres</string>
     <string name="lbl_search">Search</string>
-    <string name="discover_requires_jellyseerr">Connect Jellyseerr to enable Discover</string>
+    <string name="discover_requires_jellyseerr">Configure external services in Settings to enable Discover and Upcoming</string>
     <string name="lbl_discover">Discover</string>
+    <string name="lbl_searching">Searching...</string>
+    <string name="lbl_shows">Shows</string>
+    <string name="pref_external_services">External services</string>
+    <string name="pref_external_services_description">Configure Jellyseerr, Radarr, and Sonarr</string>
+    <string name="pref_jellyseerr">Jellyseerr</string>
+    <string name="pref_radarr">Radarr</string>
+    <string name="pref_sonarr">Sonarr</string>
+    <string name="pref_server_url">Server URL</string>
+    <string name="pref_api_key">API Key</string>
+    <string name="pref_not_set">Not set</string>
     <string name="msg_not_implemented">" not implemented"</string>
     <string name="lbl_latest">Recently added</string>
     <string name="lbl_latest_in">Recently added in %1$s</string>
@@ -40,6 +50,9 @@
     <string name="home_my_requests">My Requests</string>
     <string name="home_upcoming_movies">Upcoming Movies</string>
     <string name="home_upcoming_shows">Upcoming Shows</string>
+    <string name="external_request_success">Request sent</string>
+    <string name="external_request_failed">Request failed</string>
+    <string name="external_item_unavailable">Item unavailable</string>
     <string name="lbl_by_name">By name</string>
     <string name="lbl_favorites">Favorites</string>
     <string name="lbl_coming_up">Coming up</string>
@@ -99,7 +112,7 @@
     <string name="lbl_valid_server_address">Please enter the server address (IP or domain/machine name)</string>
     <string name="lbl_ok">Ok</string>
     <string name="lbl_born">"Born "</string>
-    <string name="lbl_loading_elipses">Loading…</string>
+    <string name="lbl_loading_elipses">Loadingâ€¦</string>
     <string name="msg_playback_not_allowed">Playback not allowed at this time</string>
     <string name="msg_playback_restricted">The administrator has restricted playback of this item at this time</string>
     <string name="msg_playback_incompatible">Cannot play this video format</string>
@@ -157,14 +170,14 @@
     <string name="lbl__continuing"> CONTINUING </string>
     <string name="lbl_ended"> ENDED </string>
     <string name="lbl_filters">Live TV filters</string>
-    <string name="msg_subtitles_loading">Subtitles loading…</string>
+    <string name="msg_subtitles_loading">Subtitles loadingâ€¦</string>
     <string name="msg_unable_load_subs">Unable to load subtitle</string>
-    <string name="msg_burn_sub_warning">Burning in subtitles. This may take a few seconds…</string>
+    <string name="msg_burn_sub_warning">Burning in subtitles. This may take a few secondsâ€¦</string>
     <string name="lbl_no_recordings">No recordings available</string>
     <string name="lbl_live_tv_guide">Live TV guide</string>
     <string name="lbl_recorded_tv">Recorded TV</string>
     <string name="pref_live_tv_cat">Live TV</string>
-    <string name="msg_error_live_stream">Error streaming live TV. Will re-try…</string>
+    <string name="msg_error_live_stream">Error streaming live TV. Will re-tryâ€¦</string>
     <string name="lbl_direct_stream_live">Direct stream live TV</string>
     <string name="lbl_programs">Programs</string>
     <string name="lbl_albums">Albums</string>
@@ -268,7 +281,7 @@
     <string name="pref_external_player">Use external player</string>
     <string name="pref_next_up_timeout_summary">How long to wait before playing the next item</string>
     <string name="pref_next_up_timeout_title">Next up timer duration</string>
-    <string name="pref_next_up_timeout_disabled">∞</string>
+    <string name="pref_next_up_timeout_disabled">âˆž</string>
     <string name="watch_now">Watch now</string>
     <string name="pref_next_up_behavior_title">Show next video info</string>
     <string name="pref_still_watching_behavior_title">Show inactivity timeout popup</string>
@@ -295,7 +308,7 @@
     <string name="msg_live_tv_next">Load next %1$d hours?"</string>
     <string name="msg_live_tv_prev">Load prev %1$d hours?"</string>
     <string name="seek_error">Unable to seek</string>
-    <string name="player_error">Player error encountered. Will re-try…</string>
+    <string name="player_error">Player error encountered. Will re-tryâ€¦</string>
     <string name="too_many_errors">Too many errors. Giving up</string>
     <string name="subtitle_error">Unable to select subtitle</string>
     <string name="msg_no_items">No items to play</string>
@@ -316,7 +329,7 @@
     <string name="server_connection_failed">Unable to connect to server</string>
     <string name="server_connection_failed_candidates">Unable to connect to server, tried the following addresses: %1$s</string>
     <string name="server_field_empty">The address cannot be empty</string>
-    <string name="login_authenticating">Authenticating…</string>
+    <string name="login_authenticating">Authenticatingâ€¦</string>
     <string name="login_invalid_credentials">Invalid username and/or password</string>
     <string name="login_server_unavailable">Unable to connect to server</string>
     <string name="login_username_field_empty">Username cannot be empty</string>
@@ -372,7 +385,7 @@
     <string name="lbl_special">Special</string>
     <string name="lbl_season_number">S%1$d</string>
     <string name="lbl_episode_number">E%1$d</string>
-    <string name="lbl_episode_range">E%1$d–%2$d</string>
+    <string name="lbl_episode_range">E%1$dâ€“%2$d</string>
     <string name="lbl_next_up_extended">With thumbnail</string>
     <string name="lbl_next_up_minimal">Without thumbnail</string>
     <string name="lbl_still_watching_default">3 episodes or 90 minutes</string>
@@ -388,7 +401,7 @@
     <string name="lbl_on_any_channel">On any channel</string>
     <string name="lbl_on_channel">On %1$s</string>
     <string name="lbl_name_date">%1$s (%2$s)</string>
-    <string name="lbl_time_range">%1$s–%2$s</string>
+    <string name="lbl_time_range">%1$sâ€“%2$s</string>
     <string name="enable_playback_module_description">This is an experimental feature. No support is provided.</string>
     <string name="last_use">Most recently used</string>
     <string name="alphabetical">Alphabetical</string>

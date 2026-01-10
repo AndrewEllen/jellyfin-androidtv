@@ -12,16 +12,22 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import java.util.UUID
 
-class HomeFragmentLatestRow : HomeFragmentRow {
+class HomeFragmentLatestRow(
+    private val moviesParentId: UUID?,
+    private val showsParentId: UUID?,
+) : HomeFragmentRow {
     override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
         val movieRequest = GetItemsRequest(
             fields = ItemRepository.itemFields,
             includeItemTypes = setOf(BaseItemKind.MOVIE),
             recursive = true,
-            sortBy = setOf(ItemSortBy.PREMIERE_DATE),
+            parentId = moviesParentId,
+            sortBy = setOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.DATE_CREATED),
             sortOrder = setOf(SortOrder.DESCENDING),
             imageTypeLimit = 1,
+            startIndex = 0,
             limit = ITEM_LIMIT,
             enableTotalRecordCount = false,
         )
@@ -30,9 +36,11 @@ class HomeFragmentLatestRow : HomeFragmentRow {
             fields = ItemRepository.itemFields,
             includeItemTypes = setOf(BaseItemKind.SERIES),
             recursive = true,
-            sortBy = setOf(ItemSortBy.PREMIERE_DATE),
+            parentId = showsParentId,
+            sortBy = setOf(ItemSortBy.PREMIERE_DATE, ItemSortBy.DATE_CREATED),
             sortOrder = setOf(SortOrder.DESCENDING),
             imageTypeLimit = 1,
+            startIndex = 0,
             limit = ITEM_LIMIT,
             enableTotalRecordCount = false,
         )

@@ -11,6 +11,6 @@
     <fraction name="lb_focus_zoom_factor_medium">@fraction/card_scale_focus</fraction>
     <fraction name="lb_focus_zoom_factor_large">@fraction/card_scale_focus</fraction>
 
-    <dimen name="home_hero_card_width">640dp</dimen>
-    <dimen name="home_hero_card_height">360dp</dimen>
+    <dimen name="home_hero_card_width">960dp</dimen>
+    <dimen name="home_hero_card_height">540dp</dimen>
 </resources>

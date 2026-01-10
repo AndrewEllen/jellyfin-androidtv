@@ -14,6 +14,7 @@ import org.jellyfin.sdk.model.api.request.GetNextUpRequest
 import org.jellyfin.sdk.model.api.request.GetRecommendedProgramsRequest
 import org.jellyfin.sdk.model.api.request.GetRecordingsRequest
 import org.jellyfin.sdk.model.api.request.GetResumeItemsRequest
+import java.util.UUID
 
 class HomeFragmentHelper(
     private val context: Context,
@@ -31,6 +32,7 @@ class HomeFragmentHelper(
             imageTypeLimit = 1,
             includeItemTypes = setOf(BaseItemKind.MOVIE, BaseItemKind.SERIES),
             sortBy = setOf(ItemSortBy.RANDOM),
+            startIndex = 0,
             limit = ITEM_LIMIT_FEATURED,
             recursive = true,
             enableTotalRecordCount = false,
@@ -39,8 +41,8 @@ class HomeFragmentHelper(
         return HomeFragmentFeaturedRow(section, query, onPlay)
     }
 
-    fun loadLatestMoviesAndShows(): HomeFragmentRow {
-        return HomeFragmentLatestRow()
+    fun loadLatestMoviesAndShows(moviesParentId: UUID?, showsParentId: UUID?): HomeFragmentRow {
+        return HomeFragmentLatestRow(moviesParentId, showsParentId)
     }
 
     fun loadResume(title: String, includeMediaTypes: Collection<MediaType>): HomeFragmentRow {

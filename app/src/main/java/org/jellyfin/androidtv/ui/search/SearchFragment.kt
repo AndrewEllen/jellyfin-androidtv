@@ -28,6 +28,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.compose.AndroidFragment
 import androidx.fragment.compose.content
 import androidx.leanback.app.RowsSupportFragment
+import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.ui.base.JellyfinTheme
 import org.jellyfin.androidtv.ui.search.composable.SearchTextInput
 import org.jellyfin.androidtv.ui.search.composable.SearchVoiceInput
@@ -66,8 +67,16 @@ class SearchFragment : Fragment() {
 					textInputFocusRequester.requestFocus()
 				}
 
-				viewModel.searchResultsFlow.collect { results ->
-					searchFragmentDelegate.showResults(results)
+				launch {
+					viewModel.searchResultsFlow.collect { results ->
+						searchFragmentDelegate.showResults(results)
+					}
+				}
+
+				launch {
+					viewModel.isSearching.collect { searching ->
+						if (searching) searchFragmentDelegate.showLoading()
+					}
 				}
 			}
 

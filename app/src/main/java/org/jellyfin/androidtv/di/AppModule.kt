@@ -144,7 +144,7 @@ val appModule = module {
 	single<SearchRepository> { SearchRepositoryImpl(get()) }
 	single<MediaSegmentRepository> { MediaSegmentRepositoryImpl(get(), get()) }
 	single<ExternalAppRepository> { ExternalAppRepository(get()) }
-	single<ExternalSectionsRepository> { ExternalSectionsRepositoryImpl() }
+	single<ExternalSectionsRepository> { ExternalSectionsRepositoryImpl(get(), get(), get()) }
 
 	viewModel { StartupViewModel(get(), get(), get(), get()) }
 	viewModel { UserLoginViewModel(get(), get(), get(), get(defaultDeviceInfo)) }

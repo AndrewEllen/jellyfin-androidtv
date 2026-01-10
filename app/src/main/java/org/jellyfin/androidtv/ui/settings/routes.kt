@@ -4,6 +4,7 @@ import org.jellyfin.androidtv.ui.navigation.RouteComposable
 import org.jellyfin.androidtv.ui.settings.screen.SettingsDeveloperScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsMainScreen
 import org.jellyfin.androidtv.ui.settings.screen.SettingsTelemetryScreen
+import org.jellyfin.androidtv.ui.settings.screen.external.SettingsExternalServicesScreen
 import org.jellyfin.androidtv.ui.settings.screen.about.SettingsAboutScreen
 import org.jellyfin.androidtv.ui.settings.screen.authentication.SettingsAuthenticationAutoSignInScreen
 import org.jellyfin.androidtv.ui.settings.screen.authentication.SettingsAuthenticationScreen
@@ -60,6 +61,7 @@ object Routes {
 	const val AUTHENTICATION_SORT_BY = "/authentication/sort-by"
 	const val AUTHENTICATION_AUTO_SIGN_IN = "/authentication/auto-sign-in"
 	const val CUSTOMIZATION = "/customization"
+	const val EXTERNAL_SERVICES = "/external-services"
 	const val CUSTOMIZATION_THEME = "/customization/theme"
 	const val CUSTOMIZATION_CLOCK = "/customization/clock"
 	const val CUSTOMIZATION_WATCHED_INDICATOR = "/customization/watch-indicators"
@@ -131,6 +133,9 @@ val routes = mapOf<String, RouteComposable>(
 	},
 	Routes.CUSTOMIZATION to {
 		SettingsCustomizationScreen()
+	},
+	Routes.EXTERNAL_SERVICES to {
+		SettingsExternalServicesScreen()
 	},
 	Routes.CUSTOMIZATION_THEME to {
 		SettingsCustomizationThemeScreen()

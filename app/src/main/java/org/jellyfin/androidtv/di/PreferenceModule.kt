@@ -1,5 +1,6 @@
 package org.jellyfin.androidtv.di
 
+import org.jellyfin.androidtv.preference.ExternalServicesPreferences
 import org.jellyfin.androidtv.preference.LiveTvPreferences
 import org.jellyfin.androidtv.preference.PreferencesRepository
 import org.jellyfin.androidtv.preference.SystemPreferences
@@ -11,6 +12,7 @@ import org.koin.dsl.module
 val preferenceModule = module {
 	single { PreferencesRepository(get(), get(), get()) }
 
+	single { ExternalServicesPreferences(get()) }
 	single { LiveTvPreferences(get()) }
 	single { UserSettingPreferences(get()) }
 	single { UserPreferences(get()) }

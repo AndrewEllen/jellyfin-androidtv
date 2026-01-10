@@ -25,6 +25,7 @@ data class ExternalSectionItem(
     val mediaType: ExternalMediaType,
     val inLibrary: Boolean,
     val requestable: Boolean,
+    val jellyfinId: java.util.UUID? = null,
 )
 
 data class ExternalSection(

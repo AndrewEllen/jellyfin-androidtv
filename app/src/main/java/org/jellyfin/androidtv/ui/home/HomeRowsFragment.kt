@@ -29,8 +29,10 @@ import kotlinx.coroutines.withTimeout
 import org.jellyfin.androidtv.auth.repository.UserRepository
 import org.jellyfin.androidtv.constant.CustomMessage
 import org.jellyfin.androidtv.constant.HomeSectionType
+import org.jellyfin.androidtv.data.model.ExternalSectionItem
 import org.jellyfin.androidtv.data.model.DataRefreshService
 import org.jellyfin.androidtv.data.repository.CustomMessageRepository
+import org.jellyfin.androidtv.data.repository.ExternalSectionsRepository
 import org.jellyfin.androidtv.data.repository.NotificationsRepository
 import org.jellyfin.androidtv.data.service.BackgroundService
 import org.jellyfin.androidtv.ui.browsing.CompositeClickedListener
@@ -39,6 +41,7 @@ import org.jellyfin.androidtv.ui.itemhandling.BaseRowItem
 import org.jellyfin.androidtv.ui.itemhandling.ItemLauncher
 import org.jellyfin.androidtv.ui.itemhandling.ItemRowAdapter
 import org.jellyfin.androidtv.ui.itemhandling.refreshItem
+import org.jellyfin.androidtv.ui.navigation.Destinations
 import org.jellyfin.androidtv.ui.navigation.NavigationRepository
 import org.jellyfin.androidtv.ui.playback.AudioEventListener
 import org.jellyfin.androidtv.ui.playback.MediaManager
@@ -47,12 +50,15 @@ import org.jellyfin.androidtv.ui.presentation.MutableObjectAdapter
 import org.jellyfin.androidtv.ui.presentation.PositionableListRowPresenter
 import org.jellyfin.androidtv.util.KeyProcessor
 import org.jellyfin.androidtv.util.PlaybackHelper
+import org.jellyfin.androidtv.util.Utils
 import org.jellyfin.playback.core.PlaybackManager
 import org.jellyfin.sdk.api.client.ApiClient
 import org.jellyfin.sdk.api.client.extensions.liveTvApi
+import org.jellyfin.sdk.api.client.extensions.userViewsApi
 import org.jellyfin.sdk.api.sockets.subscribe
 import org.jellyfin.sdk.model.api.LibraryChangedMessage
 import org.jellyfin.sdk.model.api.UserDataChangedMessage
+import org.jellyfin.sdk.model.api.CollectionType
 import org.koin.android.ext.android.inject
 import timber.log.Timber
 import kotlin.time.Duration.Companion.seconds
@@ -67,6 +73,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 	private val playbackHelper by inject<PlaybackHelper>()
 	private val dataRefreshService by inject<DataRefreshService>()
 	private val customMessageRepository by inject<CustomMessageRepository>()
+	private val externalSectionsRepository by inject<ExternalSectionsRepository>()
 	private val navigationRepository by inject<NavigationRepository>()
 	private val itemLauncher by inject<ItemLauncher>()
 	private val keyProcessor by inject<KeyProcessor>()
@@ -106,6 +113,13 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 			// Start out with default sections
 			var includeLiveTvRows = false
+			val userViews = runCatching {
+				api.userViewsApi.getUserViews().content.items
+			}.getOrElse { emptyList() }
+
+			val moviesView = userViews.firstOrNull { it.collectionType == CollectionType.MOVIES }
+			val showsView = userViews.firstOrNull { it.collectionType == CollectionType.TVSHOWS }
+
 
 			// Check for live TV support
 			if (currentUser.policy?.enableLiveTvAccess == true) {
@@ -130,9 +144,9 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 			rows.add(HomeFragmentViewsRow(small = false))
 			rows.add(helper.loadResumeVideo())
 			rows.add(helper.loadNextUp())
-			rows.add(HomeFragmentRecentlyAddedRow())
+			rows.add(HomeFragmentRecentlyAddedRow(moviesView?.id, showsView?.id))
 			rows.add(HomeFragmentBecauseYouWatchedRow(lifecycleScope))
-			rows.add(helper.loadLatestMoviesAndShows())
+			rows.add(helper.loadLatestMoviesAndShows(moviesView?.id, showsView?.id))
 			rows.add(HomeFragmentGenreRecommendationsRow(lifecycleScope))
 			rows.add(HomeFragmentExternalSectionsRow(lifecycleScope))
 
@@ -155,6 +169,7 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 
 		onItemViewClickedListener = CompositeClickedListener().apply {
 			registerListener(ItemViewClickedListener())
+			registerListener(ExternalItemClickedListener())
 			registerListener(liveTVRow::onItemClicked)
 			registerListener(notificationsRow::onItemClicked)
 		}
@@ -300,6 +315,36 @@ class HomeRowsFragment : RowsSupportFragment(), AudioEventListener, View.OnKeyLi
 		heroAutoAdvanceJob = null
 		heroRowViewHolder = null
 		heroRowAdapter = null
+	}
+
+
+	private inner class ExternalItemClickedListener : OnItemViewClickedListener {
+		override fun onItemClicked(
+			itemViewHolder: Presenter.ViewHolder?,
+			item: Any?,
+			rowViewHolder: RowPresenter.ViewHolder?,
+			row: Row?,
+		) {
+			val externalItem = item as? ExternalSectionItem ?: return
+
+			externalItem.jellyfinId?.let { jellyfinId ->
+				navigationRepository.navigate(Destinations.itemDetails(jellyfinId))
+				return
+			}
+
+			if (!externalItem.requestable) {
+				Utils.showToast(requireContext(), R.string.external_item_unavailable)
+				return
+			}
+
+			lifecycleScope.launch(Dispatchers.IO) {
+				val success = externalSectionsRepository.requestItem(externalItem)
+				val message = if (success) R.string.external_request_success else R.string.external_request_failed
+				withContext(Dispatchers.Main) {
+					Utils.showToast(requireContext(), message)
+				}
+			}
+		}
 	}
 
 	private inner class ItemViewSelectedListener : OnItemViewSelectedListener {

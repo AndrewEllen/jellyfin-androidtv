@@ -7,6 +7,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.jellyfin.androidtv.R
@@ -45,6 +46,9 @@ class SearchViewModel(
 	private val _searchResultsFlow = MutableStateFlow<Collection<SearchResultGroup>>(emptyList())
 	val searchResultsFlow = _searchResultsFlow.asStateFlow()
 
+	private val _isSearching = MutableStateFlow(false)
+	val isSearching: StateFlow<Boolean> = _isSearching
+
 	fun searchImmediately(query: String) = searchDebounced(query, 0.milliseconds)
 
 	fun searchDebounced(query: String, debounce: Duration = debounceDuration): Boolean {
@@ -53,6 +57,7 @@ class SearchViewModel(
 		previousQuery = trimmed
 
 		searchJob?.cancel()
+		_isSearching.value = false
 
 		if (trimmed.isBlank()) {
 			_searchResultsFlow.value = emptyList()
@@ -60,16 +65,21 @@ class SearchViewModel(
 		}
 
 		searchJob = viewModelScope.launch {
-			delay(debounce)
+			_isSearching.value = true
+			try {
+				delay(debounce)
 
-			_searchResultsFlow.value = groups.map { (stringRes, itemKinds) ->
-				async {
-					val result = searchRepository.search(trimmed, itemKinds)
-					val items = result.getOrNull().orEmpty()
+				_searchResultsFlow.value = groups.map { (stringRes, itemKinds) ->
+					async {
+						val result = searchRepository.search(trimmed, itemKinds)
+						val items = result.getOrNull().orEmpty()
 
-					SearchResultGroup(stringRes, items)
-				}
-			}.awaitAll()
+						SearchResultGroup(stringRes, items)
+					}
+				}.awaitAll()
+			} finally {
+				_isSearching.value = false
+			}
 		}
 
 		return true

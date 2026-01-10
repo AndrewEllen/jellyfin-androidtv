@@ -12,16 +12,22 @@ import org.jellyfin.sdk.model.api.BaseItemKind
 import org.jellyfin.sdk.model.api.ItemSortBy
 import org.jellyfin.sdk.model.api.SortOrder
 import org.jellyfin.sdk.model.api.request.GetItemsRequest
+import java.util.UUID
 
-class HomeFragmentRecentlyAddedRow : HomeFragmentRow {
+class HomeFragmentRecentlyAddedRow(
+    private val moviesParentId: UUID?,
+    private val showsParentId: UUID?,
+) : HomeFragmentRow {
     override fun addToRowsAdapter(context: Context, cardPresenter: CardPresenter, rowsAdapter: MutableObjectAdapter<Row>) {
         val moviesRequest = GetItemsRequest(
             fields = ItemRepository.itemFields,
             includeItemTypes = setOf(BaseItemKind.MOVIE),
             recursive = true,
+            parentId = moviesParentId,
             sortBy = setOf(ItemSortBy.DATE_CREATED),
             sortOrder = setOf(SortOrder.DESCENDING),
             imageTypeLimit = 1,
+            startIndex = 0,
             limit = ITEM_LIMIT,
             enableTotalRecordCount = false,
         )
@@ -30,9 +36,11 @@ class HomeFragmentRecentlyAddedRow : HomeFragmentRow {
             fields = ItemRepository.itemFields,
             includeItemTypes = setOf(BaseItemKind.SERIES),
             recursive = true,
+            parentId = showsParentId,
             sortBy = setOf(ItemSortBy.DATE_CREATED),
             sortOrder = setOf(SortOrder.DESCENDING),
             imageTypeLimit = 1,
+            startIndex = 0,
             limit = ITEM_LIMIT,
             enableTotalRecordCount = false,
         )
