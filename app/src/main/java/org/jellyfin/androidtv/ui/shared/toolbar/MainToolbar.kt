@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -64,6 +65,7 @@ enum class MainToolbarActiveButton {
 @Composable
 fun MainToolbar(
 	activeButton: MainToolbarActiveButton = MainToolbarActiveButton.None,
+	navigationFocusRequester: FocusRequester? = null,
 ) {
 	val userRepository = koinInject<UserRepository>()
 	val userViewsRepository = koinInject<UserViewsRepository>()
@@ -84,9 +86,11 @@ fun MainToolbar(
 		moviesView = moviesView,
 		showsView = showsView,
 		collectionsView = collectionsView,
+		navigationFocusRequester = navigationFocusRequester,
 	)
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun MainToolbar(
 	userImage: String? = null,
@@ -94,6 +98,7 @@ private fun MainToolbar(
 	moviesView: BaseItemDto?,
 	showsView: BaseItemDto?,
 	collectionsView: BaseItemDto?,
+	navigationFocusRequester: FocusRequester? = null,
 ) {
 	val focusRequester = remember { FocusRequester() }
 	val navigationRepository = koinInject<NavigationRepository>()
@@ -148,6 +153,10 @@ private fun MainToolbar(
 		center = {
 			ToolbarButtons(
 				modifier = Modifier
+					.then(
+						if (navigationFocusRequester == null) Modifier
+						else Modifier.focusRequester(navigationFocusRequester)
+					)
 					.focusRequester(focusRequester)
 			) {
 				ProvideTextStyle(JellyfinTheme.typography.default.copy(fontWeight = FontWeight.Bold)) {

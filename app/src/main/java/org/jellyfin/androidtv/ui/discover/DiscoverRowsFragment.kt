@@ -42,11 +42,12 @@ class DiscoverRowsFragment : RowsSupportFragment() {
 
             withContext(Dispatchers.Main) {
                 if (sections.isEmpty()) {
-                    val message = if (externalSectionsRepository.isConfigured) {
-                        getString(R.string.lbl_no_items)
-                    } else {
-                        getString(R.string.discover_requires_jellyseerr)
-                    }
+                    val message = externalSectionsRepository.lastError?.takeIf { it.isNotBlank() }
+                        ?: if (externalSectionsRepository.isConfigured) {
+                            getString(R.string.lbl_no_items)
+                        } else {
+                            getString(R.string.discover_requires_jellyseerr)
+                        }
                     addPlaceholderRow(message)
                 } else {
                     sections.forEach { section ->

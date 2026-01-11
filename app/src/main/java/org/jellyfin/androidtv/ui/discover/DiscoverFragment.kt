@@ -30,11 +30,15 @@ class DiscoverFragment : Fragment() {
         savedInstanceState: Bundle?
     ) = content {
         val rowsFocusRequester = remember { FocusRequester() }
+        val toolbarFocusRequester = remember { FocusRequester() }
         LaunchedEffect(rowsFocusRequester) { rowsFocusRequester.requestFocus() }
 
         JellyfinTheme {
             Column {
-                MainToolbar(MainToolbarActiveButton.Discover)
+                MainToolbar(
+                    MainToolbarActiveButton.Discover,
+                    navigationFocusRequester = toolbarFocusRequester,
+                )
 
                 var rowsSupportFragment by remember { mutableStateOf<DiscoverRowsFragment?>(null) }
 
@@ -43,6 +47,7 @@ class DiscoverFragment : Fragment() {
                         .focusGroup()
                         .focusRequester(rowsFocusRequester)
                         .focusProperties {
+                            up = toolbarFocusRequester
                             onExit = {
                                 val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
                                 if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {

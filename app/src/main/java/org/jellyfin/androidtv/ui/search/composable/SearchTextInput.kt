@@ -2,6 +2,7 @@ package org.jellyfin.androidtv.ui.search.composable
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,11 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,7 +66,16 @@ fun SearchTextInput(
 					indication = null,
 				) {
 					keyboardController?.show()
-				},
+				}
+				.onKeyEvent { event ->
+					if (event.type == KeyEventType.KeyUp && event.key in listOf(Key.Enter, Key.NumPadEnter, Key.DirectionCenter)) {
+						keyboardController?.show()
+						true
+					} else {
+						false
+					}
+				}
+				.focusable(),
 			value = query,
 			singleLine = true,
 			interactionSource = interactionSource,

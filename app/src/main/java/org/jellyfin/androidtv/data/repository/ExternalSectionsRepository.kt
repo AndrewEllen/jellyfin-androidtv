@@ -24,14 +24,16 @@ import org.jellyfin.androidtv.data.model.ExternalMediaType
 import org.jellyfin.androidtv.data.model.ExternalSection
 import org.jellyfin.androidtv.data.model.ExternalSectionItem
 import org.jellyfin.androidtv.data.model.ExternalSectionType
-import org.jellyfin.androidtv.preference.ExternalServicesPreferences
-import org.jellyfin.sdk.api.HttpClientOptions
+import org.jellyfin.androidtv.util.sdk.isUsable
+import org.jellyfin.sdk.api.client.HttpClientOptions
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import org.jellyfin.sdk.api.okhttp.OkHttpFactory
-import java.time.LocalDate
 import java.util.UUID
 
 interface ExternalSectionsRepository {
     val isConfigured: Boolean
+    val lastError: String?
 
     suspend fun loadHomeSections(): List<ExternalSection>
     suspend fun loadDiscoverSections(): List<ExternalSection>
@@ -39,69 +41,49 @@ interface ExternalSectionsRepository {
 }
 
 class ExternalSectionsRepositoryImpl(
-    private val externalServicesPreferences: ExternalServicesPreferences,
+    private val api: ApiClient,
     okHttpFactory: OkHttpFactory,
     httpClientOptions: HttpClientOptions,
 ) : ExternalSectionsRepository {
     private val json = Json { ignoreUnknownKeys = true }
     private val client = okHttpFactory.createClient(httpClientOptions)
+    @Volatile
+    private var lastErrorMessage: String? = null
+    @Volatile
+    private var pluginCapabilities: PluginCapabilities? = null
 
     override val isConfigured: Boolean
-        get() = hasJellyseerr() || hasRadarr() || hasSonarr()
+        get() = pluginCapabilities?.jellyseerrConfigured ?: false
+    override val lastError: String?
+        get() = lastErrorMessage
 
     override suspend fun loadHomeSections(): List<ExternalSection> = withContext(Dispatchers.IO) {
+        val capabilities = ensureCapabilities() ?: return@withContext emptyList()
         val sections = mutableListOf<ExternalSection>()
-        val jellyseerrBase = jellyseerrBaseUrl()
-        if (jellyseerrBase != null) {
-            loadJellyseerrDiscover(
-                baseUrl = jellyseerrBase,
-                type = ExternalSectionType.DISCOVER_MOVIES,
-                path = "discover/movies",
-                mediaType = ExternalMediaType.MOVIE,
-            )?.let(sections::add)
-
-            loadJellyseerrDiscover(
-                baseUrl = jellyseerrBase,
-                type = ExternalSectionType.DISCOVER_SHOWS,
-                path = "discover/tv",
-                mediaType = ExternalMediaType.SHOW,
-            )?.let(sections::add)
-
-            loadJellyseerrRequests(jellyseerrBase)?.let(sections::add)
+        if (capabilities.jellyseerrConfigured) {
+            sections += loadPluginSections("Discover")
         }
-
-        loadSonarrUpcoming()?.let(sections::add)
-        loadRadarrUpcoming()?.let(sections::add)
-
+        if (capabilities.radarrConfigured || capabilities.sonarrConfigured) {
+            sections += loadPluginSections("Upcoming")
+        }
         sections
     }
 
     override suspend fun loadDiscoverSections(): List<ExternalSection> = withContext(Dispatchers.IO) {
-        val sections = mutableListOf<ExternalSection>()
-        val jellyseerrBase = jellyseerrBaseUrl()
-        if (jellyseerrBase != null) {
-            loadJellyseerrDiscover(
-                baseUrl = jellyseerrBase,
-                type = ExternalSectionType.DISCOVER_MOVIES,
-                path = "discover/movies",
-                mediaType = ExternalMediaType.MOVIE,
-            )?.let(sections::add)
-
-            loadJellyseerrDiscover(
-                baseUrl = jellyseerrBase,
-                type = ExternalSectionType.DISCOVER_SHOWS,
-                path = "discover/tv",
-                mediaType = ExternalMediaType.SHOW,
-            )?.let(sections::add)
-
-            loadJellyseerrRequests(jellyseerrBase)?.let(sections::add)
+        val capabilities = ensureCapabilities() ?: return@withContext emptyList()
+        if (!capabilities.jellyseerrConfigured) {
+            return@withContext emptyList()
         }
-
-        sections
+        loadPluginSections("Discover")
     }
 
     override suspend fun requestItem(item: ExternalSectionItem): Boolean = withContext(Dispatchers.IO) {
-        val baseUrl = jellyseerrBaseUrl() ?: return@withContext false
+        val capabilities = ensureCapabilities() ?: return@withContext false
+        if (!capabilities.jellyseerrConfigured) {
+            return@withContext false
+        }
+
+        val baseUrl = pluginBaseUrl() ?: return@withContext false
         val mediaId = item.id.toIntOrNull() ?: return@withContext false
         val mediaType = when (item.mediaType) {
             ExternalMediaType.MOVIE -> "movie"
@@ -109,7 +91,7 @@ class ExternalSectionsRepositoryImpl(
             else -> return@withContext false
         }
 
-        val url = jellyseerrApiUrl(baseUrl, "request")
+        val url = pluginUrl(baseUrl, "Request")
         val payload = buildJsonObject {
             put("mediaType", JsonPrimitive(mediaType))
             put("mediaId", JsonPrimitive(mediaId))
@@ -117,7 +99,7 @@ class ExternalSectionsRepositoryImpl(
 
         val request = Request.Builder()
             .url(url)
-            .headers(jellyseerrHeaders())
+            .headers(jellyfinHeaders())
             .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
@@ -127,212 +109,31 @@ class ExternalSectionsRepositoryImpl(
             ?: false
     }
 
-    private fun loadJellyseerrDiscover(
-        baseUrl: HttpUrl,
-        type: ExternalSectionType,
-        path: String,
-        mediaType: ExternalMediaType,
-    ): ExternalSection? {
-        val url = jellyseerrApiUrl(baseUrl, path).newBuilder()
-            .addQueryParameter("take", DEFAULT_SECTION_LIMIT.toString())
-            .build()
-
-        val payload = fetchJson(url, jellyseerrHeaders()) ?: return null
-        val items = parseJellyseerrItems(payload, baseUrl, mediaType)
-        if (items.isEmpty()) return null
-
-        return ExternalSection(
-            id = type.name.lowercase(),
-            title = null,
-            type = type,
-            items = items,
-        )
-    }
-
-    private fun loadJellyseerrRequests(baseUrl: HttpUrl): ExternalSection? {
-        val url = jellyseerrApiUrl(baseUrl, "request").newBuilder()
-            .addQueryParameter("take", DEFAULT_SECTION_LIMIT.toString())
-            .build()
-
-        val payload = fetchJson(url, jellyseerrHeaders()) ?: return null
-        val items = parseJellyseerrItems(payload, baseUrl, ExternalMediaType.UNKNOWN)
-            .map { it.copy(requestable = false) }
-
-        if (items.isEmpty()) return null
-
-        return ExternalSection(
-            id = ExternalSectionType.MY_REQUESTS.name.lowercase(),
-            title = null,
-            type = ExternalSectionType.MY_REQUESTS,
-            items = items,
-        )
-    }
-
-    private fun loadRadarrUpcoming(): ExternalSection? {
-        val baseUrl = radarrBaseUrl() ?: return null
-        val apiKey = externalServicesPreferences[ExternalServicesPreferences.radarrApiKey].trim()
-        if (apiKey.isBlank()) return null
-
-        val dateRange = calendarRange()
-        val url = arrCalendarUrl(baseUrl, dateRange)
-        val payload = fetchJson(url, arrHeaders(apiKey)) ?: return null
-        val items = parseRadarrItems(payload, baseUrl, apiKey)
-        if (items.isEmpty()) return null
-
-        return ExternalSection(
-            id = ExternalSectionType.UPCOMING_MOVIES.name.lowercase(),
-            title = null,
-            type = ExternalSectionType.UPCOMING_MOVIES,
-            items = items,
-        )
-    }
-
-    private fun loadSonarrUpcoming(): ExternalSection? {
-        val baseUrl = sonarrBaseUrl() ?: return null
-        val apiKey = externalServicesPreferences[ExternalServicesPreferences.sonarrApiKey].trim()
-        if (apiKey.isBlank()) return null
-
-        val dateRange = calendarRange()
-        val url = arrCalendarUrl(baseUrl, dateRange)
-        val payload = fetchJson(url, arrHeaders(apiKey)) ?: return null
-        val items = parseSonarrItems(payload, baseUrl, apiKey)
-        if (items.isEmpty()) return null
-
-        return ExternalSection(
-            id = ExternalSectionType.UPCOMING_SHOWS.name.lowercase(),
-            title = null,
-            type = ExternalSectionType.UPCOMING_SHOWS,
-            items = items,
-        )
-    }
-
-    private fun parseJellyseerrItems(
-        payload: JsonElement,
-        baseUrl: HttpUrl,
-        defaultMediaType: ExternalMediaType,
-    ): List<ExternalSectionItem> {
+    private suspend fun ensureCapabilities(): PluginCapabilities? {
+        val baseUrl = pluginBaseUrl() ?: run {
+            pluginCapabilities = null
+            return null
+        }
+        val url = pluginUrl(baseUrl, "Capabilities")
+        val payload = fetchJson(url, jellyfinHeaders()) ?: run {
+            pluginCapabilities = null
+            return null
+        }
         val root = payload.jsonObject
-        val results = root["results"]?.jsonArray ?: root["items"]?.jsonArray ?: return emptyList()
 
-        return results.mapNotNull { element ->
-            val obj = element.jsonObject
-            val media = obj["media"]?.jsonObject
-            val data = media ?: obj
-
-            val id = data.int("id")
-                ?: data.int("tmdbId")
-                ?: obj.int("mediaId")
-                ?: obj.int("id")
-                ?: return@mapNotNull null
-
-            val name = data.string("title")
-                ?: data.string("name")
-                ?: obj.string("title")
-                ?: obj.string("name")
-                ?: return@mapNotNull null
-
-            val mediaTypeValue = data.string("mediaType") ?: obj.string("mediaType")
-            val mediaType = when (mediaTypeValue?.lowercase()) {
-                "movie" -> ExternalMediaType.MOVIE
-                "tv" -> ExternalMediaType.SHOW
-                else -> defaultMediaType
-            }
-
-            val overview = data.string("overview") ?: obj.string("overview")
-            val posterPath = data.string("posterPath") ?: obj.string("posterPath")
-            val backdropPath = data.string("backdropPath") ?: obj.string("backdropPath")
-            val year = data.int("year")
-                ?: obj.int("year")
-                ?: parseYear(data.string("releaseDate"))
-                ?: parseYear(data.string("firstAirDate"))
-                ?: parseYear(obj.string("releaseDate"))
-                ?: parseYear(obj.string("firstAirDate"))
-
-            val mediaInfo = data["mediaInfo"]?.jsonObject ?: obj["mediaInfo"]?.jsonObject
-            val status = mediaInfo?.string("status")
-            val jellyfinId = parseUuid(mediaInfo?.string("jellyfinId"))
-
-            val isRequested = obj.bool("requested") == true
-                || obj.int("requestCount")?.let { it > 0 } == true
-                || mediaInfo?.string("requestStatus") != null
-
-            val inLibrary = status == "AVAILABLE" || status == "PARTIALLY_AVAILABLE" || jellyfinId != null
-            val requestable = !inLibrary && !isRequested
-
-            ExternalSectionItem(
-                id = id.toString(),
-                name = name,
-                year = year,
-                overview = overview,
-                posterUrl = buildJellyseerrImageUrl(baseUrl, posterPath, POSTER_WIDTH),
-                backdropUrl = buildJellyseerrImageUrl(baseUrl, backdropPath, BACKDROP_WIDTH),
-                mediaType = mediaType,
-                inLibrary = inLibrary,
-                requestable = requestable,
-                jellyfinId = jellyfinId,
-            )
-        }
+        val capabilities = PluginCapabilities(
+            jellyseerrConfigured = root.bool("jellyseerrConfigured") == true,
+            radarrConfigured = root.bool("radarrConfigured") == true,
+            sonarrConfigured = root.bool("sonarrConfigured") == true,
+        )
+        pluginCapabilities = capabilities
+        return capabilities
     }
 
-    private fun parseRadarrItems(
-        payload: JsonElement,
-        baseUrl: HttpUrl,
-        apiKey: String,
-    ): List<ExternalSectionItem> {
-        val array = payload as? JsonArray ?: return emptyList()
-        return array.mapNotNull { element ->
-            val obj = element.jsonObject
-            val title = obj.string("title") ?: return@mapNotNull null
-            val year = obj.int("year")
-            val overview = obj.string("overview")
-            val hasFile = obj.bool("hasFile") ?: false
-            val posterUrl = parseArrImage(obj["images"], baseUrl, apiKey, "poster")
-            val backdropUrl = parseArrImage(obj["images"], baseUrl, apiKey, "fanart")
-            val id = obj.int("tmdbId") ?: obj.int("id") ?: return@mapNotNull null
-
-            ExternalSectionItem(
-                id = id.toString(),
-                name = title,
-                year = year,
-                overview = overview,
-                posterUrl = posterUrl,
-                backdropUrl = backdropUrl,
-                mediaType = ExternalMediaType.MOVIE,
-                inLibrary = hasFile,
-                requestable = false,
-            )
-        }
-    }
-
-    private fun parseSonarrItems(
-        payload: JsonElement,
-        baseUrl: HttpUrl,
-        apiKey: String,
-    ): List<ExternalSectionItem> {
-        val array = payload as? JsonArray ?: return emptyList()
-        return array.mapNotNull { element ->
-            val obj = element.jsonObject
-            val series = obj["series"]?.jsonObject
-            val title = series?.string("title") ?: obj.string("seriesTitle") ?: return@mapNotNull null
-            val year = series?.int("year")
-            val overview = series?.string("overview") ?: obj.string("overview")
-            val hasFile = obj.bool("hasFile") ?: false
-            val posterUrl = parseArrImage(series?.get("images"), baseUrl, apiKey, "poster")
-            val backdropUrl = parseArrImage(series?.get("images"), baseUrl, apiKey, "fanart")
-            val id = series?.int("tvdbId") ?: series?.int("id") ?: return@mapNotNull null
-
-            ExternalSectionItem(
-                id = id.toString(),
-                name = title,
-                year = year,
-                overview = overview,
-                posterUrl = posterUrl,
-                backdropUrl = backdropUrl,
-                mediaType = ExternalMediaType.SHOW,
-                inLibrary = hasFile,
-                requestable = false,
-            )
-        }
+    private fun loadPluginSections(path: String): List<ExternalSection> {
+        val baseUrl = pluginBaseUrl() ?: return emptyList()
+        val payload = fetchJson(pluginUrl(baseUrl, path), jellyfinHeaders()) ?: return emptyList()
+        return parsePluginSections(payload)
     }
 
     private fun fetchJson(url: HttpUrl, headers: Headers): JsonElement? {
@@ -343,107 +144,81 @@ class ExternalSectionsRepositoryImpl(
 
         val response = runCatching { client.newCall(request).execute() }.getOrNull() ?: return null
         response.use { result ->
-            if (!result.isSuccessful) return null
+            if (!result.isSuccessful) {
+                lastErrorMessage = parseErrorMessage(result.body?.string())
+                return null
+            }
             val body = result.body?.string()?.trim().orEmpty()
             if (body.isBlank()) return null
-            return runCatching { json.parseToJsonElement(body) }.getOrNull()
+            val parsed = runCatching { json.parseToJsonElement(body) }.getOrNull()
+            if (parsed != null) {
+                lastErrorMessage = null
+            }
+            return parsed
         }
     }
-
-    private fun buildJellyseerrImageUrl(baseUrl: HttpUrl, path: String?, width: Int): String? {
-        if (path.isNullOrBlank()) return null
-        val url = jellyseerrApiUrl(baseUrl, "image").newBuilder()
-            .addQueryParameter("path", path)
-            .addQueryParameter("width", width.toString())
-            .build()
-        return url.toString()
-    }
-
-    private fun parseArrImage(
-        images: JsonElement?,
-        baseUrl: HttpUrl,
-        apiKey: String,
-        coverType: String,
-    ): String? {
-        val array = images as? JsonArray ?: return null
-        val match = array.firstOrNull { element ->
-            element.jsonObject.string("coverType")?.equals(coverType, ignoreCase = true) == true
-        }?.jsonObject ?: return null
-
-        val remoteUrl = match.string("remoteUrl")
-        if (!remoteUrl.isNullOrBlank()) return remoteUrl
-
-        val url = match.string("url") ?: return null
-        val resolved = baseUrl.resolve(url)?.newBuilder()?.addQueryParameter("apikey", apiKey)?.build()
-        return resolved?.toString()
-    }
-
-    private fun jellyseerrBaseUrl(): HttpUrl? = normalizeUrl(
-        externalServicesPreferences[ExternalServicesPreferences.jellyseerrUrl]
-    )
-
-    private fun radarrBaseUrl(): HttpUrl? = normalizeUrl(
-        externalServicesPreferences[ExternalServicesPreferences.radarrUrl]
-    )
-
-    private fun sonarrBaseUrl(): HttpUrl? = normalizeUrl(
-        externalServicesPreferences[ExternalServicesPreferences.sonarrUrl]
-    )
-
-    private fun jellyseerrApiUrl(baseUrl: HttpUrl, path: String): HttpUrl {
-        return baseUrl.newBuilder()
-            .addPathSegments("api/v1")
-            .addPathSegments(path)
-            .build()
-    }
-
-    private fun arrCalendarUrl(baseUrl: HttpUrl, dateRange: DateRange): HttpUrl {
-        return baseUrl.newBuilder()
-            .addPathSegments("api/v3/calendar")
-            .addQueryParameter("start", dateRange.start.toString())
-            .addQueryParameter("end", dateRange.end.toString())
-            .build()
-    }
-
-    private fun calendarRange(): DateRange {
-        val start = LocalDate.now().minusDays(1)
-        val end = LocalDate.now().plusDays(30)
-        return DateRange(start, end)
-    }
-
-    private fun jellyseerrHeaders(): Headers {
-        val apiKey = externalServicesPreferences[ExternalServicesPreferences.jellyseerrApiKey].trim()
-        return if (apiKey.isNotBlank()) {
-            Headers.headersOf("X-Api-Key", apiKey)
-        } else {
-            Headers.headersOf()
-        }
-    }
-
-    private fun arrHeaders(apiKey: String): Headers = Headers.headersOf("X-Api-Key", apiKey)
-
-    private fun hasJellyseerr(): Boolean =
-        externalServicesPreferences[ExternalServicesPreferences.jellyseerrUrl].isNotBlank()
-
-    private fun hasRadarr(): Boolean =
-        externalServicesPreferences[ExternalServicesPreferences.radarrUrl].isNotBlank() &&
-            externalServicesPreferences[ExternalServicesPreferences.radarrApiKey].isNotBlank()
-
-    private fun hasSonarr(): Boolean =
-        externalServicesPreferences[ExternalServicesPreferences.sonarrUrl].isNotBlank() &&
-            externalServicesPreferences[ExternalServicesPreferences.sonarrApiKey].isNotBlank()
-
-    private fun normalizeUrl(rawUrl: String): HttpUrl? {
-        val cleaned = rawUrl.trim().trimEnd('/')
-        return if (cleaned.isBlank()) null else cleaned.toHttpUrlOrNull()
-    }
-
-    private fun parseYear(value: String?): Int? = value?.take(4)?.toIntOrNull()
 
     private fun parseUuid(value: String?): UUID? = try {
         if (value.isNullOrBlank()) null else UUID.fromString(value)
     } catch (_: IllegalArgumentException) {
         null
+    }
+
+    private fun parsePluginSections(payload: JsonElement): List<ExternalSection> {
+        val array = payload as? JsonArray ?: return emptyList()
+        return array.mapNotNull { element ->
+            val obj = element.jsonObject
+            val id = obj.string("id") ?: return@mapNotNull null
+            val type = parseSectionType(obj.string("type")) ?: return@mapNotNull null
+            val items = obj["items"]?.jsonArray?.mapNotNull { itemElement ->
+                val item = itemElement.jsonObject
+                val itemId = item.string("id") ?: return@mapNotNull null
+                val name = item.string("name") ?: return@mapNotNull null
+                val mediaType = parseMediaType(item.string("mediaType"))
+
+                ExternalSectionItem(
+                    id = itemId,
+                    name = name,
+                    year = item.int("year"),
+                    overview = item.string("overview"),
+                    posterUrl = item.string("posterUrl"),
+                    backdropUrl = item.string("backdropUrl"),
+                    mediaType = mediaType,
+                    inLibrary = item.bool("inLibrary") ?: false,
+                    requestable = item.bool("requestable") ?: false,
+                    jellyfinId = parseUuid(item.string("jellyfinId")),
+                )
+            } ?: emptyList()
+
+            val sectionItems = if (type == ExternalSectionType.UPCOMING_MOVIES || type == ExternalSectionType.UPCOMING_SHOWS) {
+                items.filterNot { it.inLibrary }
+            } else {
+                items
+            }
+
+            ExternalSection(
+                id = id,
+                title = obj.string("title"),
+                type = type,
+                items = sectionItems,
+            )
+        }
+    }
+
+    private fun parseSectionType(value: String?): ExternalSectionType? = when (value?.uppercase()) {
+        "DISCOVER_MOVIES" -> ExternalSectionType.DISCOVER_MOVIES
+        "DISCOVER_SHOWS" -> ExternalSectionType.DISCOVER_SHOWS
+        "MY_REQUESTS" -> ExternalSectionType.MY_REQUESTS
+        "UPCOMING_MOVIES" -> ExternalSectionType.UPCOMING_MOVIES
+        "UPCOMING_SHOWS" -> ExternalSectionType.UPCOMING_SHOWS
+        "CUSTOM" -> ExternalSectionType.CUSTOM
+        else -> null
+    }
+
+    private fun parseMediaType(value: String?): ExternalMediaType = when (value?.uppercase()) {
+        "MOVIE" -> ExternalMediaType.MOVIE
+        "SHOW", "TV" -> ExternalMediaType.SHOW
+        else -> ExternalMediaType.UNKNOWN
     }
 
     private fun JsonObject.string(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
@@ -452,12 +227,49 @@ class ExternalSectionsRepositoryImpl(
 
     private fun JsonObject.bool(key: String): Boolean? = this[key]?.jsonPrimitive?.booleanOrNull
 
-    private data class DateRange(val start: LocalDate, val end: LocalDate)
+    private fun pluginBaseUrl(): HttpUrl? {
+        if (!api.isUsable) return null
+        val baseUrl = api.baseUrl?.trim()?.trimEnd('/') ?: return null
+        return baseUrl.toHttpUrlOrNull()
+    }
+
+    private fun pluginUrl(baseUrl: HttpUrl, path: String): HttpUrl {
+        return baseUrl.newBuilder()
+            .addPathSegments("Plugins/AndroidTvSeerAar/External")
+            .addPathSegments(path)
+            .build()
+    }
+
+    private fun jellyfinHeaders(): Headers {
+        val accessToken = api.accessToken ?: return Headers.headersOf()
+        val header = AuthorizationHeaderBuilder.buildHeader(
+            api.clientInfo.name,
+            api.clientInfo.version,
+            api.deviceInfo.id,
+            api.deviceInfo.name,
+            accessToken,
+        )
+        return Headers.headersOf(
+            "Authorization", header,
+            "X-Emby-Authorization", header,
+            "X-Emby-Token", accessToken,
+        )
+    }
+
+    private data class PluginCapabilities(
+        val jellyseerrConfigured: Boolean,
+        val radarrConfigured: Boolean,
+        val sonarrConfigured: Boolean,
+    )
 
     private companion object {
-        private const val DEFAULT_SECTION_LIMIT = 20
-        private const val POSTER_WIDTH = 500
-        private const val BACKDROP_WIDTH = 1280
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+    }
+
+    private fun parseErrorMessage(body: String?): String? {
+        val payload = body?.trim().orEmpty()
+        if (payload.isBlank()) return "External services error."
+        val parsed = runCatching { json.parseToJsonElement(payload) }.getOrNull() as? JsonObject
+        return parsed?.string("message") ?: "External services error."
     }
 }

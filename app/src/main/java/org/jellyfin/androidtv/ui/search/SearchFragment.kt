@@ -53,6 +53,7 @@ class SearchFragment : Fragment() {
 			val viewModel = koinViewModel<SearchViewModel>()
 			val searchFragmentDelegate = koinInject<SearchFragmentDelegate> { parametersOf(requireContext()) }
 			var query by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
+			val toolbarFocusRequester = remember { FocusRequester() }
 			val textInputFocusRequester = remember { FocusRequester() }
 			val resultFocusRequester = remember { FocusRequester() }
 			val speechRecognizerAvailability = rememberSpeechRecognizerAvailability()
@@ -81,7 +82,10 @@ class SearchFragment : Fragment() {
 			}
 
 			Column {
-				MainToolbar(MainToolbarActiveButton.Search)
+				MainToolbar(
+					MainToolbarActiveButton.Search,
+					navigationFocusRequester = toolbarFocusRequester,
+				)
 
 				Row(
 					horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -129,6 +133,7 @@ class SearchFragment : Fragment() {
 						.focusGroup()
 						.focusRequester(resultFocusRequester)
 						.focusProperties {
+							up = textInputFocusRequester
 							onExit = {
 								val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
 								if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {

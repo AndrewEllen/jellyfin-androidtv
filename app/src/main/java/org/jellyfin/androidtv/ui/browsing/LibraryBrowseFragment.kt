@@ -38,7 +38,7 @@ class LibraryBrowseFragment : Fragment() {
                 MainToolbar(activeButton)
                 AndroidFragment<BrowseGridFragment>(
                     modifier = Modifier.fillMaxSize(),
-                    arguments = arguments,
+                    arguments = arguments ?: Bundle(),
                 )
             }
         }

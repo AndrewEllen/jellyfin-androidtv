@@ -45,11 +45,15 @@ class HomeFragment : Fragment() {
 		savedInstanceState: Bundle?
 	) = content {
 		val rowsFocusRequester = remember { FocusRequester() }
+		val toolbarFocusRequester = remember { FocusRequester() }
 		LaunchedEffect(rowsFocusRequester) { rowsFocusRequester.requestFocus() }
 
 		JellyfinTheme {
 			Column {
-				MainToolbar(MainToolbarActiveButton.Home)
+				MainToolbar(
+					MainToolbarActiveButton.Home,
+					navigationFocusRequester = toolbarFocusRequester,
+				)
 
 				// The leanback code has its own awful focus handling that doesn't work properly with Compose view inteop to workaround this
 				// issue we add custom behavior that only allows focus exit when the current selected row is the first one. Additionally when
@@ -60,6 +64,7 @@ class HomeFragment : Fragment() {
 						.focusGroup()
 						.focusRequester(rowsFocusRequester)
 						.focusProperties {
+							up = toolbarFocusRequester
 							onExit = {
 								val isFirstRowSelected = rowsSupportFragment?.selectedPosition?.let { it <= 0 } ?: false
 								if (requestedFocusDirection != FocusDirection.Up || !isFirstRowSelected) {

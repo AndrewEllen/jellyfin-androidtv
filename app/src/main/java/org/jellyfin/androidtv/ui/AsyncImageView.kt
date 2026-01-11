@@ -13,6 +13,8 @@ import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.ImageLoader
 import coil3.asImage
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.request.target
@@ -24,6 +26,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jellyfin.androidtv.R
 import org.jellyfin.androidtv.util.BlurHashDecoder
+import org.jellyfin.androidtv.util.sdk.isUsable
+import org.jellyfin.sdk.api.client.ApiClient
+import org.jellyfin.sdk.api.client.util.AuthorizationHeaderBuilder
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import kotlin.math.round
@@ -42,6 +47,7 @@ class AsyncImageView @JvmOverloads constructor(
 	private val lifeCycleOwner get() = findViewTreeLifecycleOwner()
 	private val styledAttributes = context.obtainStyledAttributes(attrs, R.styleable.AsyncImageView, defStyleAttr, 0)
 	private val imageLoader by inject<ImageLoader>()
+	private val api by inject<ApiClient>()
 	private var loadJob: Job? = null
 
 	/**
@@ -103,10 +109,36 @@ class AsyncImageView @JvmOverloads constructor(
 					placeholder(placeholderOrBlurHash?.asImage())
 					if (circleCrop) transformations(CircleCropTransformation())
 					error(placeholder?.asImage())
+
+					val authHeaders = buildJellyfinHeaders(url)
+					if (authHeaders != null) {
+						httpHeaders(authHeaders)
+					}
 				}.build()
 			}
 
 			imageLoader.enqueue(request).job.await()
 		}
+	}
+
+	private fun buildJellyfinHeaders(url: String): NetworkHeaders? {
+		if (!api.isUsable) return null
+		val baseUrl = api.baseUrl?.trim()?.trimEnd('/') ?: return null
+		if (!url.startsWith(baseUrl, ignoreCase = true)) return null
+		val accessToken = api.accessToken ?: return null
+
+		val header = AuthorizationHeaderBuilder.buildHeader(
+			api.clientInfo.name,
+			api.clientInfo.version,
+			api.deviceInfo.id,
+			api.deviceInfo.name,
+			accessToken,
+		)
+
+		return NetworkHeaders.Builder()
+			.set("Authorization", header)
+			.set("X-Emby-Authorization", header)
+			.set("X-Emby-Token", accessToken)
+			.build()
 	}
 }
